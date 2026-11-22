@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-svc
+  namespace: support-lab
+spec:
+  selector:
+    app: frontend
+  ports:
+  - port: 80
+    targetPort: 80
