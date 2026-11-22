@@ -3,6 +3,11 @@
 ## Overview
 This repository contains the Kubernetes manifests and Root Cause Analysis (RCA) for troubleshooting a Service-to-Pod connectivity failure in a local **Kind (Kubernetes in Docker)** cluster.
 
+After deploying the three-tier application and confirming healthy end-to-end connectivity, a realistic Kubernetes networking issue (**Incorrect Service Selector**) was **intentionally introduced** without stopping or deleting any pods by patching `backend-svc` to point to a non-existent label:
+```bash
+kubectl patch svc backend-svc -n support-lab -p '{"spec":{"selector":{"app":"backend-v2"}}}'
+```
+
 ### Architecture
 - **Cluster:** Local Kind cluster (`imesh-lab`)
 - **Namespace:** `support-lab`
