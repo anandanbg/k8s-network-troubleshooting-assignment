@@ -1,37 +1,94 @@
-﻿# Kubernetes Network Troubleshooting Assignment
+Kubernetes Network Troubleshooting Assignment
 
-## Environment & Architecture
-- **Cluster:** Local Kind (Kubernetes in Docker) cluster
-- **Namespace:** \support-lab\
-- **Traffic Flow:** \client\ (curl pod) ──▶ \rontend-svc\ ──▶ \rontend\ (nginx:80) ──▶ \ackend-svc\ ──▶ \ackend\ (http-echo:8080)
+Overview
 
-## 1. Symptom
-- Requests from \client\ to \http://frontend-svc\ succeeded (\HTTP/1.1 200 OK\).
-- Requests from \rontend\ to \http://backend-svc\ failed with:
-  \wget: can't connect to remote host (10.96.120.50): Connection refused\
+This repository contains the Kubernetes manifests and Root Cause Analysis (RCA) for troubleshooting a Service-to-Pod connectivity failure in a local Kind (Kubernetes in Docker) cluster.
 
-## 2. Investigation
-Ran layer-by-layer Kubernetes networking diagnostics inside the \support-lab\ namespace:
-1. \kubectl get pods -n support-lab -o wide --show-labels\
-2. \kubectl exec -n support-lab deploy/frontend -- nslookup backend-svc.support-lab.svc.cluster.local\
-3. \kubectl get endpoints -n support-lab\
-4. \kubectl describe svc backend-svc -n support-lab\
+Architecture
 
-## 3. Observations
-- **Pod Health:** All pods (\client\, \rontend\, \ackend\) were \1/1 Running\, and the \ackend\ pod carried the label \pp=backend\.
-- **DNS Resolution:** \ackend-svc.support-lab.svc.cluster.local\ resolved cleanly to ClusterIP \10.96.120.50\, confirming CoreDNS was healthy.
-- **Endpoints:** \kubectl get endpoints -n support-lab\ showed \ackend-svc\ had \<none>\ endpoints.
-- **Service Selector:** \kubectl describe svc backend-svc -n support-lab\ revealed \Selector: app=backend-v2\.
+Cluster: Local Kind cluster (imesh-lab)
 
-## 4. Root Cause
-The \ackend-svc\ Service label selector (\pp: backend-v2\) did not match the \ackend\ Deployment pod label (\pp: backend\). Because no pods matched the selector, Kubernetes did not attach any endpoints to \ackend-svc\, causing traffic to its ClusterIP to be refused.
+Namespace: support-lab
 
-## 5. Resolution
-Reapplied the corrected \manifests/backend-svc.yml\ with \selector: app=backend\:
-\\\ash
+Traffic Flow: client (curl pod) -> frontend-svc -> frontend (nginx:80) -> backend-svc -> backend (http-echo:8080)
+
+Repository Structure
+
+.
+├── manifests/
+│   ├── backend-deploy.yml
+│   ├── backend-svc.yml
+│   ├── client.yml
+│   ├── frontend-deploy.yml
+│   └── frontend-svc.yml
+└── README.md
+
+
+Symptom
+
+What was failing?
+
+Connectivity from client to frontend-svc worked normally (HTTP/1.1 200 OK).
+
+Connectivity from frontend to backend-svc failed with a Connection refused error:
+
+wget: can't connect to remote host (10.96.120.50): Connection refused
+
+
+Investigation
+
+What commands did you use?
+
+# 1. Check pod status, IPs, and labels
+kubectl get pods -n support-lab -o wide --show-labels
+
+# 2. Verify DNS resolution from inside the frontend pod
+kubectl exec -n support-lab deploy/frontend -- nslookup backend-svc.support-lab.svc.cluster.local
+
+# 3. Check Service Endpoints
+kubectl get endpoints -n support-lab
+
+# 4. Inspect the backend-svc configuration
+kubectl describe svc backend-svc -n support-lab
+
+
+Observations
+
+What did you discover during troubleshooting?
+
+Pod Health: All pods (client, frontend, backend) were healthy and in 1/1 Running state. The backend pod had the label app=backend.
+
+DNS Resolution: backend-svc.support-lab.svc.cluster.local resolved cleanly to ClusterIP 10.96.120.50, confirming CoreDNS was functioning properly.
+
+Endpoints: kubectl get endpoints -n support-lab showed backend-svc had <none> endpoints, meaning no backend pod IP was mapped to the Service.
+
+Service Selector: kubectl describe svc backend-svc -n support-lab revealed Selector: app=backend-v2.
+
+Root Cause
+
+What exactly caused the connectivity failure?
+There was a Service selector mismatch. The backend-svc Service was configured with the selector app: backend-v2, whereas the backend Deployment pods were labeled app: backend. Because no pods matched the selector, Kubernetes did not attach any endpoints to backend-svc, causing traffic sent to its ClusterIP (10.96.120.50) to be refused.
+
+Resolution
+
+What did you change to fix it?
+Updated the backend-svc Service selector from app: backend-v2 back to app: backend by reapplying the corrected manifest:
+
 kubectl apply -f manifests/backend-svc.yml
-\\\
 
-## 6. Verification
-- \kubectl get endpoints -n support-lab\ confirmed the \ackend\ pod IP and port \:8080\ were attached to \ackend-svc\.
-- \kubectl exec -n support-lab deploy/frontend -- wget -qO- http://backend-svc\ returned \Hello from Backend!\, confirming end-to-end connectivity was restored.
+
+Verification
+
+How did you verify that the issue was resolved?
+
+Confirmed that the backend pod IP and port :8080 were reattached to backend-svc:
+
+kubectl get endpoints -n support-lab
+
+
+Re-tested connectivity from frontend to backend-svc:
+
+kubectl exec -n support-lab deploy/frontend -- wget -qO- http://backend-svc
+
+
+Result: Returned Hello from Backend!, confirming end-to-end connectivity was restored.
